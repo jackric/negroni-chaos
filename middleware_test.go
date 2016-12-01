@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"time"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,5 +36,29 @@ func TestMiddleware(t *testing.T) {
 	}
 	require.Equal(t, 34, goodResponses)
 	require.Equal(t, badResponses, 66)
+
+}
+
+func TestSlowMiddleware(t *testing.T) {
+	shortest := 20 * time.Millisecond
+	longest := 80 * time.Millisecond
+	// Allow for some time for the real handler underneath
+	toleranceLongest := longest + (5 * time.Millisecond)
+	mw := NewSlowMiddleware(1234, shortest, longest)
+	dummyHandler := func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Good")
+	}
+
+	req := httptest.NewRequest("GET", "http://example.com/foo", nil)
+
+	for i := 0; i < 100; i++ {
+		w := httptest.NewRecorder()
+		begin := time.Now()
+		mw.ServeHTTP(w, req, dummyHandler)
+		end := time.Now()
+		duration := end.Sub(begin)
+		require.True(t, duration < toleranceLongest, "Reponse took too long, %s > %s", duration, toleranceLongest)
+		require.True(t, duration > shortest, "Reponse was too fast, %s < %s", duration, shortest)
+	}
 
 }
